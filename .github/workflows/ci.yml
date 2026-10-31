@@ -16,4 +16,5 @@ jobs:
         with:
           python-version: '3.11'
       - run: npm test
+      - run: python -m unittest discover -s tests -p "test_*.py"
       - run: python scripts/audit_public.py
