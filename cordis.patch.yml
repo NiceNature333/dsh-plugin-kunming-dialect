@@ -1,0 +1,9 @@
+- insert:
+    - id: kunming-dialect
+      name: dsh-plugin-kunming-dialect
+      config:
+        transport: harness
+        provider: deepseek-account
+        model: deepseek-flash
+        intensity: heavy
+        retrievalLimit: 10

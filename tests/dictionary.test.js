@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {Dictionary} from '../src/dictionary.js';import {fixture} from './fixtures/synthetic-dictionary.js';
+import {mkdtempSync,writeFileSync,unlinkSync,rmdirSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';
+test('synthetic database integrity, provenance and phonetics isolation',()=>{const f=fixture();try{assert.equal(f.dictionary.open().prepare('PRAGMA integrity_check').get().integrity_check,'ok');const e=f.dictionary.candidates(['问候'])[0];assert.equal(e.lemma,'示例称呼甲');assert.equal(e.source_pdf_page,1);assert.equal(e.pronunciation_raw,undefined);}finally{f.close();}});
+test('missing dictionary fails without creating empty database',()=>{const d=new Dictionary(join(tmpdir(),'kunming-nonexistent-'+process.pid+'.sqlite'));assert.throws(()=>d.open());d.close();});
+test('corrupt dictionary is closed and rejected',()=>{const dir=mkdtempSync(join(tmpdir(),'kunming-test-'));const path=join(dir,'corrupt.sqlite');writeFileSync(path,'invalid database');const d=new Dictionary(path);try{assert.throws(()=>d.open());assert.equal(d.db,undefined);}finally{d.close();unlinkSync(path);rmdirSync(dir);}});

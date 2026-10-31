@@ -1,0 +1,7 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {configure} from '../src/config.js';import {lookup_dialect} from '../src/retrieval.js';import {fixture} from './fixtures/synthetic-dictionary.js';
+for(const [draft,lemma] of [['发出问候','示例称呼甲'],['感到疲惫','示例状态乙']])test('synthetic reverse retrieval '+draft,()=>{const f=fixture();try{assert.ok(lookup_dialect(f.dictionary,draft).some(x=>x.lemma===lemma));}finally{f.close();}});
+test('no unrelated fallback and limit',()=>{const f=fixture();try{assert.deepEqual(lookup_dialect(f.dictionary,'量子纠缠'),[]);assert.equal(lookup_dialect(f.dictionary,'问候疲惫',1).length,1);}finally{f.close();}});
+test('full mode includes unreviewed synthetic entries without changing provenance',()=>{const f=fixture({includeUnreviewed:true});try{const hit=lookup_dialect(f.dictionary,'出去散步')[0];assert.equal(hit.id,'c');assert.equal(hit.review_status,'pending');assert.equal(hit.pronunciation_raw,undefined);assert.equal(hit.raw_text,undefined);assert.ok(hit.definition_excerpt.length<=240);}finally{f.close();}});
+test('default mode excludes unreviewed synthetic entries',()=>{const f=fixture();try{assert.deepEqual(lookup_dialect(f.dictionary,'出去散步'),[]);}finally{f.close();}});
+test('full mode switch is boolean',()=>{assert.equal(configure().includeUnreviewed,false);assert.equal(configure({includeUnreviewed:true}).includeUnreviewed,true);assert.throws(()=>configure({includeUnreviewed:'true'}));});
