@@ -9,6 +9,7 @@ export function configure(input={}) {
   if(!['harness','openai'].includes(c.transport)||!['light','medium','heavy'].includes(c.intensity)) throw new Error('invalid mode');
   const url=new URL(c.apiBase); if(url.protocol!=='https:' && !(url.protocol==='http:'&&['localhost','127.0.0.1'].includes(url.hostname))) throw new Error('invalid URL');
   if(c.statusPath!==undefined&&typeof c.statusPath!=='string')throw new Error('invalid statusPath');
+  if(c.orthographyPath!==undefined&&typeof c.orthographyPath!=='string')throw new Error('invalid orthographyPath');
   if(url.username||url.password||url.search||url.hash) throw new Error('invalid URL');
   return c;
 }

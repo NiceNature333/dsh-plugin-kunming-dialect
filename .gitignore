@@ -23,6 +23,7 @@ dist/
 *.tiff
 *.zip
 *.7z
+*.rar
 docs/OCR_SAMPLES.md
 docs/EVALUATION.md
 docs/TEST_REPORT.md

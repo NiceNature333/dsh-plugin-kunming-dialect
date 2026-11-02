@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { lookup_dialect } from './retrieval.js';
+import {loadOrthography,applyOrthography,assertProtectedSpellings,maskProtectedSpellings} from './orthography.js';
 const system=readFileSync(new URL('./prompts/kunming-rewrite.md',import.meta.url),'utf8');
 export function validateOutput(draft,text){
   if(typeof text!=='string'||!text.trim()||text.length>draft.length*3+200)throw new Error('INVALID_OUTPUT');
@@ -21,7 +22,10 @@ export function createRewriter(config,dictionary,{llm,fetchImpl=fetch,log=()=>{}
     if(typeof context!=='string'||!['heavy','medium','light'].includes(intensity))return fallback('invalid_input');
     let candidates;
     try{candidates=lookup_dialect(dictionary,draft,config.retrievalLimit);}catch{return fallback('dictionary_unavailable');}
-    const payload=JSON.stringify({draft,context:context.slice(0,config.maxContextChars),intensity,candidates});
+    let spellingRules;
+    try{spellingRules=loadOrthography(config.orthographyPath);}catch{return fallback('orthography_unavailable',candidates.length);}
+    const protectedDraft=maskProtectedSpellings(draft,spellingRules);
+    const payload=JSON.stringify({draft:protectedDraft.text,context:context.slice(0,config.maxContextChars),intensity,candidates,spellingRules});
     let last='model_unavailable';
     for(let attempt=0;attempt<=config.retries;attempt++){
       const timeout=AbortSignal.timeout(config.timeoutMs);const signal=externalSignal?AbortSignal.any([externalSignal,timeout]):timeout;
@@ -42,7 +46,9 @@ export function createRewriter(config,dictionary,{llm,fetchImpl=fetch,log=()=>{}
           if(!response.ok){const e=new Error('HTTP');e.retryable=response.status===429||response.status>=500;throw e;}
           const body=await response.json();if(body.choices?.[0]?.finish_reason!=='stop')throw new Error('INCOMPLETE');text=body.choices[0].message?.content;
         }
-        text=validateOutput(draft,text);
+        text=protectedDraft.restore(text);
+        assertProtectedSpellings(draft,text,spellingRules);
+        text=validateOutput(draft,applyOrthography(text,spellingRules));
         const result={text,status:'ok',hits:candidates.length,elapsed_ms:Date.now()-start};log({status:'ok',hits:result.hits,elapsed_ms:result.elapsed_ms});return result;
       }catch(error){last=signal.aborted?'timeout':'model_unavailable';if(externalSignal?.aborted||error.retryable===false||['MISSING_KEY','FACT_CHANGED','INVALID_OUTPUT','INCOMPLETE'].includes(error.message))break;}
     }

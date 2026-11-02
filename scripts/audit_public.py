@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 def git(*args): return subprocess.check_output(['git',*args],cwd=ROOT)
 BLOCKED_PREFIXES=('data/','source/','cache/','logs/','tmp/','.venv/','node_modules/','.references/')
-BLOCKED_SUFFIXES=('.pdf','.sqlite','.db','.jsonl','.csv','.png','.jpg','.jpeg','.gif','.tif','.tiff','.webp','.bundle','.zip','.7z','.log')
+BLOCKED_SUFFIXES=('.pdf','.sqlite','.db','.jsonl','.csv','.png','.jpg','.jpeg','.gif','.tif','.tiff','.webp','.bundle','.zip','.7z','.rar','.log')
 PATTERNS={
  'github_token':re.compile(r'gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}'),
  'api_secret':re.compile(r'\bsk-[A-Za-z0-9_-]{24,}'),
