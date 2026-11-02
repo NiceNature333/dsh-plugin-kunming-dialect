@@ -18,7 +18,8 @@ export class Dictionary {
       const pool=examples.all(e.id).map(x=>({...x,source_pdf_page:e.source_pdf_page,review_status:e.review_status==='verified'?'source_checked':e.review_status,origin:'stored_example'}));
       if(autoExamples)pool.push(...autoExamples.all(...(this.hasCuration?[e.id,e.id]:[e.id])).map(x=>({...x,origin:'automatic_candidate'})));
       const unique=new Map();for(const x of pool)if(!unique.has(x.dialect))unique.set(x.dialect,x);
-      const chosen=[...unique.values()].slice(0,this.examplesPerEntry);
+      const relevance=x=>terms.reduce((score,term)=>score+(term.length>=2&&x.dialect.includes(term)?term.length:0),x.origin==='stored_example'?0.5:0);
+      const chosen=[...unique.values()].sort((a,b)=>relevance(b)-relevance(a)||a.dialect.length-b.dialect.length).slice(0,this.examplesPerEntry);
       return {id:e.id,lemma:e.lemma,mandarin_meaning:e.mandarin_meaning,meaning_origin:e.review_status==='verified'?'source_checked':'automatic_gloss_projection',definition_excerpt:excerpt(e.definition),usage_notes:e.usage_notes||(e.review_status==='verified'?'':'用户允许试用的OCR词条；释义片段可能含错字、混合义项或例句。无可靠释义时不要猜测用法。'),examples:chosen.map(x=>x.dialect),example_provenance:chosen.map(({source_pdf_page,review_status,origin})=>({source_pdf_page,review_status,origin})),score:e.score+Math.min(3,e.priority_score/10),reasons:e.reasons,source_pdf_page:e.source_pdf_page,source_printed_page:e.source_printed_page,review_status:e.review_status};
     });
   }
