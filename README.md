@@ -28,7 +28,7 @@ Invocation is model-directed. Prompt instructions request a tool call, but canno
 ## Install and enable
 
 ```powershell
-git clone <this-repository-url>
+git clone https://github.com/NiceNature333/dsh-plugin-kunming-dialect.git
 cd dsh-plugin-kunming-dialect
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
