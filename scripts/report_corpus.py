@@ -8,7 +8,9 @@ def report(path):
  entries=[dict(r) for r in db.execute('SELECT id,lemma,review_status,source_pdf_page,source_printed_page FROM entries ORDER BY source_pdf_page,id')]
  annotations={r['entry_id']:dict(r) for r in db.execute('SELECT * FROM entry_curation')} if curated else {}
  examples=[dict(r) for r in db.execute('SELECT e.lemma,e.source_pdf_page,x.dialect FROM examples x JOIN entries e ON e.id=x.entry_id ORDER BY e.source_pdf_page,e.lemma')]
- lines=['# 当前本地语料清单','','私有文件，包含导入资料。禁止提交到公开仓库。',f'原始及核验记录 {len(entries)}；显式重复折叠 {sum(bool(a.get("duplicate_of")) for a in annotations.values())}；来源核对种子 {sum(e["review_status"]=="verified" for e in entries)}；核验例句 {len(examples)}。','', '## 来源核对种子','','、'.join(e['lemma'] for e in entries if e['review_status']=='verified'),'','## 已存储核验例句','']
+ auto_table=bool(db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='example_candidates'").fetchone())
+ auto_count=db.execute('SELECT count(*) FROM example_candidates').fetchone()[0] if auto_table else 0
+ lines=['# 当前本地语料清单','','私有文件，包含导入资料。禁止提交到公开仓库。',f'原始及核验记录 {len(entries)}；显式重复折叠 {sum(bool(a.get("duplicate_of")) for a in annotations.values())}；来源核对种子 {sum(e["review_status"]=="verified" for e in entries)}；核验例句 {len(examples)}。',f'自动例句候选 {auto_count} 条；includeExampleCandidates=true 时全部参与选用，原始审核状态不变。每次仅选取少量相关候选，不发送整库。','', '## 来源核对种子','','、'.join(e['lemma'] for e in entries if e['review_status']=='verified'),'','## 已存储核验例句','']
  lines += [f"- {x['lemma']} / PDF {x['source_pdf_page']}：{x['dialect']}" for x in examples]
  lines+=['','## 全部记录','','|词头|状态|PDF页|重复指向|自动问题|','|---|---|---:|---|---|']
  for e in entries:
