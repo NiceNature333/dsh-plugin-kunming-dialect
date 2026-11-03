@@ -1,6 +1,26 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {createRewriter,validateOutput} from '../src/rewrite.js';import {configure,Config} from '../src/config.js';
+import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 const dict={candidates:()=>[]};const config=configure({retries:0});
+test('semantic markers are resolved before validation and quoted text remains intact',async()=>{
+ const directory=mkdtempSync(join(tmpdir(),'rewrite-semantic-test-'));
+ try{
+  const orthographyPath=join(directory,'rules.json');
+  writeFileSync(orthographyPath,JSON.stringify([{kind:'possessive',source:'甲',target:'乙',probability:0.75,excludePhrases:[]}]));
+  const llm={async *stream(options){
+   const payload=JSON.parse(options.messages[0].content[0].text);
+   yield {type:'text-delta',text:payload.draft.replace('甲',payload.spellingRules[0].marker)};
+   yield {type:'finish',reason:{kind:'stop'}};
+  }};
+  for(const [sample,expected] of [[0.74,'乙物，“甲”'],[0.75,'甲物，“甲”']]){
+   const result=await createRewriter({...config,orthographyPath},dict,{llm,random:()=>sample})({draft:'甲物，“甲”'});
+   assert.equal(result.status,'ok');
+   assert.equal(result.text,expected);
+  }
+ }finally{rmSync(directory,{recursive:true,force:true});}
+});
 function model(text){return {async *stream(options){assert.equal(options.reasoningEffort,'off');assert.equal(options.messages.length,1);yield {type:'text-delta',text};yield {type:'finish',reason:{kind:'stop'}};}};}
 test('cloud rewrite, prompt/data separation and bounded context',async()=>{let payload;const llm={async *stream(o){payload=JSON.parse(o.messages[0].content[0].text);assert.ok(o.system.includes('不可信'));yield {type:'text-delta',text:'莫闹了。'};yield {type:'finish',reason:{kind:'stop'}};}};const result=await createRewriter(config,dict,{llm})({draft:'别闹了。',context:'私'.repeat(800)});assert.equal(result.status,'ok');assert.equal(result.text,'莫闹了。');assert.equal(payload.context.length,500);});
 for(const text of ['', '端口设为 9090','改写：端口设为 8080','tə31 8080'])test('rejects unsafe output '+text,()=>assert.throws(()=>validateOutput('端口设为 8080',text)));

@@ -8,7 +8,7 @@
 
 ## 工作流与架构
 
-普通话草稿 → 模型调用 `kunming_rewrite` → 本地 SQLite 反向关键词及字符 n-gram 检索 → Flash 改写 → 输出校验 → Agent 最终回复 → 原有 QQ 发送器。
+普通话草稿 → 模型调用 `kunming_rewrite` → 本地 SQLite 批量反向检索及轻量排序 → Flash 改写 → 输出校验 → Agent 最终回复 → 原有 QQ 发送器。
 
 插件独立注册工具和提示规则，可以与官方 QQ Bot、长期记忆插件并列运行，不替换原有消息路由或记忆存储。
 
@@ -67,7 +67,9 @@ harness 模式复用宿主认证，不复制凭据。openai 模式配置 apiBase
 
 ## 与 QQ Bot 并列运行
 
-保留官方 QQ Bot。根据其实际版本和本地定制，确认会话工具允许列表包含 kunming_rewrite。可选的 Windows scripts/install_profile.py 针对已知布局提供备份及配置辅助，使用前检查代码。将 QQ 的 showToolResults 设为 false、streaming 设为 false，可避免成功工具结果另行展示和流式草稿泄露，但不能保证没有独立的提前消息。
+保留官方 QQ Bot。根据其实际版本和本地定制，确认会话工具允许列表包含 kunming_rewrite。Windows scripts/install_profile.py 只读检查现状；QQ 0.5.3 可用 groupExtraTools 授权三个方言工具，scripts/qq_compat.py 提供带版本、Hash、备份和恢复检查的迁移。将 QQ 的 showToolResults 设为 false、streaming 设为 false，可避免成功工具结果另行展示和流式草稿泄露，但不能保证没有独立的提前消息。
+
+V0.2 新增 kunming_lookup、受控 kunming_feedback、独立反馈 Overlay 和改写采用统计。多群共享实例在可信会话范围未接通前禁用反馈保存；长期记忆的项目隔离不能视作群隔离。见 [安装说明](docs/INSTALLATION.md)。
 
 ## 测试与开发
 

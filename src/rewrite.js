@@ -1,4 +1,7 @@
 import { readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import {parseRewrite,adoption} from './adoption.js';
+import {diagnostics} from './diagnostics.js';
 import { lookup_dialect } from './retrieval.js';
 import {loadOrthography,applyOrthography,assertProtectedSpellings,maskProtectedSpellings} from './orthography.js';
 const system=readFileSync(new URL('./prompts/kunming-rewrite.md',import.meta.url),'utf8');
@@ -12,21 +15,28 @@ export function validateOutput(draft,text){
   for(const token of tokens)if(!text.includes(token))throw new Error('FACT_CHANGED');
   return text.trim();
 }
-export function createRewriter(config,dictionary,{llm,fetchImpl=fetch,log=()=>{}}={}){
+export function createRewriter(config,dictionary,{llm,fetchImpl=fetch,log=()=>{},random=Math.random}={}){
+  const diagnostic=diagnostics(config.diagnosticsPath,{mode:config.diagnosticsMode||'aggregate',retention:config.diagnosticsRetention||200});
   return async function rewrite({draft,context='',intensity=config.intensity}={},externalSignal){
     const start=Date.now();
-    if(typeof draft!=='string'||!draft.trim())return {text:'',status:'invalid_input',hits:0};
-    const fallback=(status,hits=0)=>({text:draft,status,hits,elapsed_ms:Date.now()-start});
+    const stats={matched_count:0,retrieved_count:0,example_count:0,model_claimed_ids:[],verified_adopted_ids:[],uncertain_ids:[],adopted_count:0,retrieval_ms:0,rewrite_ms:0};
+    if(typeof draft!=='string'||!draft.trim())return {text:'',status:'invalid_input',hits:0,...stats,rewrite_status:'invalid_input',elapsed_ms:0};
+    const fallback=(status,hits=0)=>{const r={text:draft,status,hits,...stats,rewrite_status:status,elapsed_ms:Date.now()-start};diagnostic.record(r);return r;};
     // Never silently drop the tail of a draft. Long drafts are returned unchanged.
     if(draft.length>config.maxDraftChars)return fallback('too_long');
     if(typeof context!=='string'||!['heavy','medium','light'].includes(intensity))return fallback('invalid_input');
     let candidates;
+    const retrievalStart=Date.now();
     try{candidates=lookup_dialect(dictionary,draft,config.retrievalLimit);}catch{return fallback('dictionary_unavailable');}
+    stats.retrieval_ms=Date.now()-retrievalStart;stats.matched_count=dictionary.lastMatchedCount??candidates.length;stats.retrieved_count=candidates.length;stats.example_count=candidates.reduce((n,e)=>n+(e.examples?.length||0),0);
     let spellingRules;
     try{spellingRules=loadOrthography(config.orthographyPath);}catch{return fallback('orthography_unavailable',candidates.length);}
     const protectedDraft=maskProtectedSpellings(draft,spellingRules);
-    const payload=JSON.stringify({draft:protectedDraft.text,context:context.slice(0,config.maxContextChars),intensity,candidates,spellingRules});
+    const semanticMarkers=spellingRules.map(rule=>rule.kind==='possessive'?'KUNMINGATTR'+randomUUID().replaceAll('-','')+'END':undefined);
+    const modelRules=spellingRules.map((rule,index)=>({...rule,...(semanticMarkers[index]?{marker:semanticMarkers[index]}:{})}));
+    const payload=JSON.stringify({draft:protectedDraft.text,context:context.slice(0,config.maxContextChars),intensity,candidates,spellingRules:modelRules});
     let last='model_unavailable';
+    const rewriteStart=Date.now();
     for(let attempt=0;attempt<=config.retries;attempt++){
       const timeout=AbortSignal.timeout(config.timeoutMs);const signal=externalSignal?AbortSignal.any([externalSignal,timeout]):timeout;
       try{
@@ -46,12 +56,17 @@ export function createRewriter(config,dictionary,{llm,fetchImpl=fetch,log=()=>{}
           if(!response.ok){const e=new Error('HTTP');e.retryable=response.status===429||response.status>=500;throw e;}
           const body=await response.json();if(body.choices?.[0]?.finish_reason!=='stop')throw new Error('INCOMPLETE');text=body.choices[0].message?.content;
         }
+        const parsed=parseRewrite(text);text=parsed.text;
         text=protectedDraft.restore(text);
         assertProtectedSpellings(draft,text,spellingRules);
-        text=validateOutput(draft,applyOrthography(text,spellingRules));
-        const result={text,status:'ok',hits:candidates.length,elapsed_ms:Date.now()-start};log({status:'ok',hits:result.hits,elapsed_ms:result.elapsed_ms});return result;
+        text=applyOrthography(text,spellingRules,{semanticMarkers,random});
+        if(text.includes('KUNMINGATTR'))throw new Error('INVALID_OUTPUT');
+        text=validateOutput(draft,text);
+        Object.assign(stats,adoption(draft,text,candidates,parsed.ids));stats.rewrite_ms=Date.now()-rewriteStart;
+        const result={text,status:'ok',hits:candidates.length,...stats,rewrite_status:'ok',elapsed_ms:Date.now()-start};diagnostic.record(result,{draft,candidates});log({status:'ok',hits:result.hits,adopted_count:stats.adopted_count,elapsed_ms:result.elapsed_ms});return result;
       }catch(error){last=signal.aborted?'timeout':'model_unavailable';if(externalSignal?.aborted||error.retryable===false||['MISSING_KEY','FACT_CHANGED','INVALID_OUTPUT','INCOMPLETE'].includes(error.message))break;}
     }
+    stats.rewrite_ms=Date.now()-rewriteStart;
     log({status:last,hits:candidates.length,elapsed_ms:Date.now()-start});return fallback(last,candidates.length);
   };
 }

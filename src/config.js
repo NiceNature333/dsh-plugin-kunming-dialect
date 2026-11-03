@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import {dirname,join} from 'node:path';
 export function configure(input={}) {
   if (!input || typeof input!=='object' || Array.isArray(input)) throw new Error('config');
   const c={dbPath:process.env.KUNMING_DB||fileURLToPath(new URL('../data/kunming.sqlite',import.meta.url)), provider:'deepseek-account',model:process.env.KUNMING_MODEL||'deepseek-flash', transport:'harness',apiBase:process.env.KUNMING_API_BASE||'https://api.deepseek.com/v1',apiKeyEnv:'KUNMING_API_KEY',timeoutMs:30000,maxOutputTokens:2048,intensity:'heavy',retrievalLimit:10,maxDraftChars:6000,maxContextChars:500,retries:1,...input};
@@ -13,6 +14,10 @@ export function configure(input={}) {
   const url=new URL(c.apiBase); if(url.protocol!=='https:' && !(url.protocol==='http:'&&['localhost','127.0.0.1'].includes(url.hostname))) throw new Error('invalid URL');
   if(c.statusPath!==undefined&&typeof c.statusPath!=='string')throw new Error('invalid statusPath');
   if(c.orthographyPath!==undefined&&typeof c.orthographyPath!=='string')throw new Error('invalid orthographyPath');
+  for(const key of ['diagnosticsPath','overlayPath','feedbackScope'])if(c[key]!==undefined&&(typeof c[key]!=='string'||!c[key]))throw Error('invalid '+key);
+  c.diagnosticsMode??='aggregate';c.diagnosticsRetention??=200;
+  c.diagnosticsPath??=join(dirname(c.dbPath),'private','diagnostics.json');
+  if(!['off','aggregate','private'].includes(c.diagnosticsMode)||!Number.isInteger(c.diagnosticsRetention)||c.diagnosticsRetention<1||c.diagnosticsRetention>10000)throw Error('invalid diagnostics');
   if(url.username||url.password||url.search||url.hash) throw new Error('invalid URL');
   return c;
 }
